@@ -1,0 +1,157 @@
+---
+title: 'Lab 4.2: Web Scraping'
+output:
+  html_document:
+    df_print: paged
+---
+
+# Scraping a NY Times Article w/ `rvest`
+Adapted from [Medium Post by _Towards Data Science_](https://medium.com/towards-data-science/web-scraping-tutorial-in-r-5e71fd107f32)
+
+The objective of this lab is to practice web scraping. In this example, we will create a database from NY Time's ongoing article on lies by President Trump.
+
+We select this article because it is well-formatted and serves as a nice introduction to web-scraping. We do not attempt to take or support any political stances by selecting this article.
+
+These are the steps to web-scraping:
+ 1. Request webpage
+ 2. Parse & extract relevant information in page
+ 3. Save data
+ 4. Clean data
+
+For doing our webscraping, we will use the rvest package. Run this line to install it.
+```{r setup}
+if (!require(rvest)) { install.packages('rvest'); require(rvest) } # see https://github.com/hadley/rvest
+
+library(mosaicModel)
+library(mosaic)
+library(statisticalModeling)
+library(tibble)
+library(rvest)
+library(stringr) # for doing string manipulations
+ # you can use a different string manipulation library if you want
+```
+
+## Step 1: Requesting the NYT webpage
+
+*TODO* Use the read_html() function to request the webpage. Store it in the nyt variable
+```{r}
+# run this line to understand what read_html() does
+?read_html
+
+url_link <- "https://www.nytimes.com/interactive/2017/06/23/opinion/trumps-lies.html"
+
+nyt <- read_html(url_link) #TODO
+```
+
+## Step 2: Parsing & Extract relevant information
+
+The next step is figuring out what data you need. In this case, we want the following data for each entry:
+- date
+- lie (quote)
+- explanation
+- URL (to source)
+
+*TODO*: Inspect the HTML of the webpage and figure out the structure of 1 entry
+
+You should have found something like this:
+<span class="short-desc"><strong>DATE</strong>LIE<span class="short-truth"><a href=URL>EXPLANATION</a></span></span>
+
+
+Let's get a list of all entries we want. We can use the html_nodes() method to do this.
+*TODO*: Use the `html_nodes()` method to get a list of all entries
+```{r}
+?html_nodes
+
+results <- nyt %>% html_nodes(".short-desc") #TODO: input an appropriate CSS selector into html_nodes
+
+results
+```
+
+
+### Extracting Date
+
+Let's practice extracting values from 1 entry at first. Here we do the extraction of date for you.
+*TODO*: Talk with your neighbor to understand the following:
+1. What does `%>%` do?
+2. Why are we passing "strong" into `html_nodes()`?
+3. Look at the documentation for `html_text()`. What does it do? What does `trim=TRUE` do?
+4. What does str_c do? Why do we need it?
+```{r}
+first_result <- results[1]
+
+extract_date <- function(result){
+  date <- result %>% html_nodes("strong") %>% html_text(trim=TRUE)
+  
+  str_c(date, ', 2017') 
+}
+
+extract_date(first_result)
+```
+
+### Extracting Lie
+
+Now let's extract the lie/quote. `xml_contents()` shows you the XML structure of an entry. This should help us figure out how to extract the lie/quote.
+
+*TODO*: Fill in the `extract_lie` method: 
+ 1. Use xml_contents to select the quote/lie and then pipe it to html_text (you'll want to trim leading and trailing spaces).
+ 2. Use the `str_sub` method to remove the leading and trailing quotes
+```{r}
+#xml_contents(first_result) # which value is the lie/quote? 2
+
+# TODO: fill this in!
+extract_lie <- function(result){
+  var<-str_trim(xml_contents(result)[2])
+  fuker <- str_sub(var, start = 2, end = -2) 
+  return (fuker)
+}
+
+extract_lie(first_result) # should something like "I wasn't a fan of Iraq. I didn't want to go into Iraq."
+```
+
+### Extracting Explanation
+*TODO*: Fill in the function to get the explanation for each result (e.g. "He was for an invasion before he was against it"). Don't forget to trim the white space and remove the leading and trailing quotes!
+```{r}
+extract_explanation <- function(result) {
+  explan <- result %>% html_nodes(".short-truth") %>% html_text(trim=TRUE)
+  
+ return(str_sub(explan, start = 2, end = -2))
+}
+
+extract_explanation(first_result) # should return something like "He was for an invasion before he was against it."
+```
+
+### Extracting URL
+*TODO*: Fill in the function get the URL to the source of the explanation.
+_hint_: check out the `html_node()` and `html_attr()` methods
+
+```{r}
+extract_url <- function(result) {
+  url <- result %>% html_nodes("a") %>% html_attr("href")
+  return(url)
+}
+
+extract_url(first_result) # should return something like "https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-invading-iraq-on-the"
+```
+
+## Step 3: Save the data
+Now let's put it all together! Save the date, lie/quote, explanation, and url from each result in a dataframe "df_trump".
+*TODO*: Complete the for-loop to store the data in "df_trump"
+```{r}
+records <- tribble( ~date, ~lie, ~explanation, ~url)
+
+for (i in seq(1:length(results))) {
+  result <- results[i]
+  
+  date <- extract_date(result)
+  lie <- extract_lie(result)
+  explanation <- extract_explanation(result)
+  url <- extract_url(result)
+  
+  records <- add_row(records, date = date, lie = lie, explanation = explanation, url = url)
+  
+}
+
+
+#View(records)
+```
+

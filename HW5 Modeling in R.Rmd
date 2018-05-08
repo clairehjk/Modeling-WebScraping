@@ -1,0 +1,225 @@
+---
+title: "Homework 5 - Modeling in R"
+output:
+  html_document:
+    df_print: paged
+---
+
+Loading data
+```{r}
+library(gridExtra)
+library(grid)
+library(mosaicModel)
+library(mosaic)
+library(statisticalModeling)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+require(broom)
+load("data_sim1.Rda")
+data_sim1
+```
+
+## Basic fitting of a model using R and tidyverse packages
+Let's start by fitting a linear model using the built in package.
+
+```{r}
+
+#fit a linear model for y using x
+# linear_model <- lm ( ? )
+linear_model <- lm ( y ~x, data=data_sim1)
+summary(linear_model)
+
+# get the coefficients from the model
+# tidy is a trick to make the model object from lm into a data frame
+#   makes it easier to extract parts of it
+#   -> you can access them with paramters[1] to get the intercept, [2] for the slope
+parameters = tidy(linear_model)$estimate
+
+# calculate the predictions from the lm model and add them to the data_sim1
+# remember that the equation of a line is y = intercept + slope*x
+# uncomment these lines and fix as needed
+data_sim1 <- data_sim1 %>%
+  mutate(
+    linear_model_prediction = parameters[1] + parameters[2]*x
+  )
+
+```
+## Tidy modeling with broom
+
+You added the predictions above manually.
+Packages like broom help you add predictions automatically. This is similar to some of the packages in the Datacamp course, but those packages in the statisticalModeling library aren't well-maintained / lack some flexibility (even though they are very good). People use broom more in practice.
+```{r}
+# use broom package to add predicted values to our dataset from the model
+# (called .fitted ; same as model_output for )
+# other values are added too like .residual = actual-.fitted
+data_with_model_output <- augment(linear_model, data=data_sim1)
+
+#let's plot the data and the prediction
+# do this for data_sim1 then data_with_model_output 
+#    to check these methods are equivalent
+
+# hint: make the first layer have the predictions with larger sized points
+#     so the actual data can be put on top of it 
+ggplot(data_sim1 , aes(x)) +
+  geom_point(aes(y= linear_model_prediction), size = 3, colour = "red") +
+  geom_point(aes(y= y), size = 2, colour = "grey30")
+
+ggplot(data_with_model_output , aes(x)) +
+  geom_point(aes(y= linear_model_prediction), size = 3, colour = "red") +
+  geom_point(aes(y= y), size = 2, colour = "grey30")
+
+```
+Do you think this is a good model for the data set? Why?
+  Yes, because the prediction and actual values are close, with the exception of one outlier.
+
+What information would help you answer the question above better?
+  Legends, and lines to connect the dots would help.   
+# Does faculty salary vary by gender and/or rank?
+
+(modified from assignment from Mike Freeman's INFO370 class)
+
+Let's begin by reading in some data from [this course website](http://data.princeton.edu/wws509/datasets/#salary). Columns included are:
+    
+    - **sx** = Sex, coded 1 for female and 0 for male
+    - **rk** = Rank, coded
+        - 1 for assistant professor,
+        - 2 for associate professor, and
+        - 3 for full professor
+    - **yr** = Number of years in current rank
+    - **dg** = Highest degree, coded 1 if doctorate, 0 if masters
+    - **yd** = Number of years since highest degree was earned
+    - **sl** = Academic year salary, in dollars.
+```{r}
+library(readr)
+faculty <- read_table(url("http://data.princeton.edu/wws509/datasets/salary.dat"))
+glimpse(faculty)
+```
+## Descriptive statistics by gender
+Before doing any modeling, you should get a basic feel for the gender breakdown in your dataset.
+ 
+Write code for each of the below:
+```{r}
+# What is the number of males/females in the dataset? What does this already tell you...?
+#38 males, 14 females
+male<- nrow(filter(faculty, sx == "male"))
+female<-nrow(filter(faculty, sx == "female"))
+
+# What is the mean salary by sex? Hint: you'll have to groupby sex (`sx`)
+mean_salary_sex <- faculty %>% select(sl,sx) %>%group_by(sx) %>% summarise(mean = mean(sl))
+
+# Draw histograms for the distribution of salaries for males and females (separately)
+# Hint: you can use ggplot and facet 
+# The x and y axes should be consistent between the graphs
+ggplot(data = faculty, aes(x = sl)) + geom_histogram(binwidth = 500) + facet_wrap(~ sx)
+# Draw histograms for the distribution of salaries by rank
+ggplot(data = faculty, aes(x = sl)) + geom_histogram(binwidth = 500) + facet_wrap(~ rk)
+# Create scatterplots to show how salary compares to years since degree / in current rank
+ggplot(data = faculty, aes(x = sl)) + geom_point(aes(y= yd), size = 2, colour = "yellow") + geom_point(aes(y = yr), size = 2,colour = "blue")
+       
+# Create plots of salary (by gender) for each rank
+ggplot(data = faculty, aes(x = sx)) + geom_boxplot(aes(y= sl)) + facet_wrap(~ rk)
+ 
+# What do these tell you about gender discrimination on the faculty?
+# Generally for associate and full professor, males earn a lot more then a females. For assistant professor, there is not a big difference, but males still earn more on average.
+
+```
+## Simple linear regression: what is the salary increase associated with each additional year in your current position (yr)?
+
+```{r}
+# Create a simple linear model that assesses the relationship between 
+# years in current position with salary
+model_1 <- lm(yr ~ sl, data = faculty)
+# What is the effect size of years on salary? Also interpret the effect size in words.
+# Hint: you can use tools from statisticalModeling package used in the Datacamp course
+effect_size <- effect_size(model_1, ~ sl)
+#effect_size measures the the change in salary per year
+# Evaluate the accuracy of your model. Calculate a metric for it.
+evaluate_model(model_1)
+# Interpret the metric for accuracy above.
+# 11.525629-5.004129= 6.5215
+# Draw a scatterplot with your model on it to show how well the model fits the data
+# Hint: broom and ggplot may be useful here
+
+parameters = tidy(model_1)$estimate
+faculty <- faculty %>%
+  mutate(
+    linear_model_prediction = parameters[1] + parameters[2]*sl
+  )
+data_with_model_output <- augment(model_1, data=faculty)
+ggplot(data_with_model_output , aes(sl)) +
+  geom_point(aes(y= linear_model_prediction), size = 3, colour = "red") +
+  geom_point(aes(y= yr), size = 2, colour = "grey30")
+
+```
+## Multiple Regression
+Predict using multiple independent variables
+
+```{r}
+# Using multiple regression, create a linear model that uses 
+# sex, rank, and years in current rank variables to estimate salary
+model_2 <- lm(sl ~ sx + rk + yr, data = faculty)
+# What is the effect size for each variable in the model? Also interpret the effect size in words.
+#The relationship between salary and sex when going from male to female increases salary by $524.1492 for full time professor and 7 years in profession.
+effect_size(model_2, ~ sx)
+#The relationship between salary and rank when going from full time to assistant decreases salary by $9483.842 for males and 7 years in profession.
+effect_size(model_2, ~ rk)
+#The relationship between salary and years when going from 7 years to 12.50754 years increases salary by $390.9358 for males who are full time professors.
+effect_size(model_2, ~ yr)
+
+#
+# Write what surprises you....
+# The effect size from male to female actually increases in year 7 for full time, which is surprising when looking at the previous graphs.
+
+# Create a new dataset with your multiple regression model's predictions in a new column
+
+new_data <- augment(model_2, faculty)
+new_data
+# How do the new model's predictions compare to the simpler model's predictions?
+# Make plots and then write below
+
+grid.arrange(mod_plot(model_1)+labs(subtitle="salary model"),
+             mod_plot(model_2)+labs(subtitle="salary, rank, year model"), ncol=1)
+mod_error(model_1)
+mod_error(model_2)
+
+# The  model shows that salary increases over time for rank and sex. similar to how the linear model shows salary should increase over time.
+
+# Create a scatter plot with years since degree on the x axis, and 
+# Salary on the y axis. Show points for both the data, and the multiple regression values.
+# Bonus points: improve the visualization above by adding more variables
+# 
+ggplot(new_data , aes(yr)) +
+  geom_point(aes(y= sl), size = 2)
+summary(new_data)
+```
+## Assess predictions
+
+```{r}
+# Make a scatterplot that compares the data (x) to the predictions (y)
+# Add a line showing where the perfect values would be (i.e., prediction equal to data)
+new_data
+parameters = tidy(model_2)$estimate
+new_data <- new_data %>%
+  mutate(
+    linear_model_pred = parameters[1] + parameters[2]*yr
+  )
+ggplot(faculty, aes(yr)) +
+  geom_point(aes(y=linear_model_prediction), size = 2)
+# What are the MSE values of the two models?
+mod_error(model_1)
+mod_error(model_2)
+
+# Which one explains more variance?
+
+# Plot the salary v.s. the *residuals* (difference between actual and predicted values)
+# Create a separate (adjacent) plot for each model
+# Add a horizontal line at 0 to help interpret the graph
+# or use the ggplot resources in #help on slack to make a better residuals plot
+# ie
+# http://shinyapps.org/apps/RGraphCompendium/index.php
+# http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html
+
+# Provide an interpretation for these graphs
+# (write here)
+```
